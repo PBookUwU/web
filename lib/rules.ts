@@ -228,6 +228,151 @@ function findSimilarDomainFlag(urls: string[]): DetectedFlag | null {
 }
 
 // ---------------------------------------------
+// AI 병합용 카테고리 메타데이터
+// -> 규칙 기반이 놓치기 쉬운 "우회 표현"(띄어쓰기, 자모 분리, 특수문자
+//    삽입, 은어 등)을 AI가 대신 찾아냈을 때, 동일한 라벨/점수 체계로
+//    점수에 반영하기 위한 단일 소스입니다.
+//    (URL 기반 카테고리인 단축URL/유사도메인은 텍스트 우회와 무관해 제외)
+// ---------------------------------------------
+export interface AiCategoryMeta {
+  label: string;
+  scoreForType?: (type: InputType) => number;
+  score?: number;
+  critical?: boolean;
+  // AI 프롬프트에 보여줄 설명 (해당 카테고리가 어떤 패턴인지)
+  promptHint: string;
+  // 특정 입력 타입 전용 카테고리인 경우에만 지정
+  onlyFor?: InputType;
+}
+
+export const AI_CATEGORY_META: Record<string, AiCategoryMeta> = {
+  urgency: {
+    label: "긴급성 유발 표현",
+    scoreForType: (t) => (t === "sms" ? 20 : 15),
+    promptHint: "즉시/긴급/계정 정지/당첨/한정/선착순 등 판단을 서두르게 하는 표현",
+  },
+  sensitive_info: {
+    label: "개인/금융 정보 요구",
+    score: 25,
+    promptHint: "계좌번호/카드번호/비밀번호/인증번호/OTP/주민등록번호 등 민감정보 요구",
+  },
+  sms_pattern: {
+    label: "스미싱 전형 패턴",
+    score: 15,
+    onlyFor: "sms",
+    promptHint: "택배/배송조회/결제확인/본인인증/미납 등 문자 특유 표현",
+  },
+  attachment_lure: {
+    label: "첨부파일 실행 유도",
+    score: 15,
+    onlyFor: "email",
+    promptHint: "첨부파일 확인/다운로드 후 실행/압축파일 해제 등",
+  },
+  gov_impersonation: {
+    label: "공공기관/수사기관 사칭",
+    score: 60,
+    critical: true,
+    promptHint: "검찰/경찰/금융감독원/국세청 등 사칭, 계좌 동결, 출석 요구, 구속영장 등",
+  },
+  remote_control: {
+    label: "원격 제어/앱 설치 유도",
+    score: 60,
+    critical: true,
+    promptHint: "원격제어/화면공유/보안앱 설치 유도, 팀뷰어/AnyDesk 등",
+  },
+  loan_investment: {
+    label: "대출/투자 사기 의심",
+    score: 25,
+    promptHint: "저금리 대환대출, 무담보 대출, 고수익 보장, 리딩방, 선입금 등",
+  },
+  impersonation_messenger: {
+    label: "지인/가족 사칭 의심",
+    score: 55,
+    critical: true,
+    promptHint: "폰 고장/액정 깨짐을 빙자한 지인·가족 사칭, 상품권·기프트카드·급전 요구",
+  },
+  click_lure: {
+    label: "클릭 유도 표현",
+    score: 10,
+    promptHint: "아래 링크를 클릭/지금 클릭/여기를 눌러주세요 등 클릭을 재촉하는 일반 표현",
+  },
+  customs_scam: {
+    label: "관세/통관 사기 의심",
+    score: 20,
+    promptHint: "관세 미납, 통관 보류, 해외직구 통관, 세관 신고 등",
+  },
+  invitation_obituary: {
+    label: "청첩장/부고 위장 스미싱 의심",
+    score: 55,
+    critical: true,
+    promptHint: "모바일 청첩장/부고 안내를 가장한 악성 링크·앱 설치 유도",
+  },
+  job_scam: {
+    label: "채용/부업 사기 의심",
+    score: 20,
+    promptHint: "고수익 알바, 재택 부업, 단순 업무 고수익 등 취업 사기형 표현",
+  },
+  payment_login_alert: {
+    label: "결제/로그인 알림 사칭 의심",
+    score: 20,
+    promptHint: "해외 결제 승인, 새로운 기기에서 로그인, 정기결제 자동 갱신 등",
+  },
+};
+
+// AI 프롬프트에 삽입할 카테고리 설명 목록 텍스트
+export function buildAiCategoryPromptList(type: InputType): string {
+  return Object.entries(AI_CATEGORY_META)
+    .filter(([, meta]) => !meta.onlyFor || meta.onlyFor === type)
+    .map(([id, meta]) => `- ${id}: ${meta.label} — ${meta.promptHint}`)
+    .join("\n");
+}
+
+// AI가 찾아낸 카테고리 id들을 규칙 기반 결과에 병합해 점수를 재계산합니다.
+// - 규칙 기반에서 이미 잡힌 라벨은 중복 추가하지 않습니다.
+// - 입력 타입에 맞지 않는 카테고리(onlyFor)는 무시합니다.
+export function mergeAiDetectedCategories(
+  ruleResult: RuleResult,
+  type: InputType,
+  aiCategoryIds: string[],
+  aiEvidence?: Record<string, string>
+): RuleResult {
+  const existingLabels = new Set(ruleResult.flags.map((f) => f.label));
+  const newFlags: DetectedFlag[] = [];
+
+  for (const id of aiCategoryIds) {
+    const meta = AI_CATEGORY_META[id];
+    if (!meta) continue;
+    if (meta.onlyFor && meta.onlyFor !== type) continue;
+    if (existingLabels.has(meta.label)) continue;
+
+    const score = meta.scoreForType ? meta.scoreForType(type) : meta.score ?? 0;
+    const evidence = aiEvidence?.[id];
+    newFlags.push({
+      label: meta.label,
+      detail: evidence
+        ? `AI가 우회 표현(띄어쓰기, 자모 분리, 은어 등)으로 감지: "${evidence}"`
+        : "AI가 우회 표현(띄어쓰기, 자모 분리, 은어 등)을 통해 감지했습니다.",
+      score,
+      critical: meta.critical,
+    });
+    existingLabels.add(meta.label);
+  }
+
+  if (newFlags.length === 0) return ruleResult;
+
+  const allFlags = [...ruleResult.flags, ...newFlags];
+  let totalScore = Math.min(100, allFlags.reduce((sum, f) => sum + f.score, 0));
+  const hasCriticalFlag = allFlags.some((f) => f.critical);
+  if (hasCriticalFlag) totalScore = Math.max(totalScore, 75);
+
+  let riskLevel: RuleResult["riskLevel"] = "low";
+  if (totalScore >= 70 || hasCriticalFlag) riskLevel = "high";
+  else if (totalScore >= 40) riskLevel = "caution";
+
+  return { score: totalScore, flags: allFlags, riskLevel };
+}
+
+// ---------------------------------------------
 // 메인 분석 함수
 // ---------------------------------------------
 export function analyzeWithRules(text: string, type: InputType): RuleResult {
