@@ -84,6 +84,78 @@ const REMOTE_CONTROL_KEYWORDS = [
 ];
 
 // ---------------------------------------------
+// 8. 대출/투자 사기 유혹 패턴
+// -> 저금리 대환대출, 무담보/무직자 대출, 고수익 보장형 투자 리딩방 등은
+//    대표적인 금융 사기 유형이며, 링크나 연락처로 유도하는 경우가 많습니다.
+// ---------------------------------------------
+const LOAN_INVESTMENT_KEYWORDS = [
+  "저금리 대환대출", "무담보 대출", "무직자 대출", "신용조회 없이",
+  "당일 대출", "즉시 대출 가능", "고수익 보장", "원금 보장",
+  "리딩방", "수익률 보장", "투자 전문가 무료 상담", "선입금",
+];
+
+// ---------------------------------------------
+// 9. 지인/가족 사칭(메신저 피싱) 패턴
+// -> "엄마/아빠 폰 고장" 등으로 접근해 상품권이나 급전을 요구하는
+//    메신저 피싱은 그 자체로 결정적인 위험 신호이므로 critical 처리.
+// ---------------------------------------------
+const IMPERSONATION_MESSENGER_KEYWORDS = [
+  "폰 고장", "액정 깨져서", "휴대폰 수리 맡겨", "다른 폰으로 문자",
+  "급하게 돈", "잠깐 돈 좀", "상품권 구매", "기프트카드 번호",
+  "문화상품권 핀번호", "구글기프트카드",
+];
+
+// ---------------------------------------------
+// 10. 링크 클릭을 직접적으로 유도하는 일반 표현
+// -> 특정 사칭 유형에 속하지 않더라도, 클릭을 재촉하는 문구 자체가
+//    피싱 문자/메일에서 매우 흔하게 나타나는 패턴입니다.
+// ---------------------------------------------
+const CLICK_LURE_KEYWORDS = [
+  "아래 링크를 클릭", "링크를 눌러", "지금 클릭", "여기를 눌러주세요",
+  "바로가기 확인", "클릭 후 확인",
+];
+
+// ---------------------------------------------
+// 11. 관세/통관 사기 패턴
+// -> 해외직구 배송을 빙자해 관세 미납, 통관 보류 등을 이유로
+//    링크 클릭이나 결제를 유도하는 수법입니다.
+// ---------------------------------------------
+const CUSTOMS_SCAM_KEYWORDS = [
+  "관세 미납", "통관 보류", "통관번호 확인", "관세청", "해외직구 통관",
+  "국제우편 세관", "세관 신고", "부가세 미납",
+];
+
+// ---------------------------------------------
+// 12. 청첩장/부고 위장 스미싱 패턴
+// -> 모바일 청첩장·부고 안내를 가장해 악성 APK 설치를 유도하는
+//    최근 스미싱 트렌드입니다.
+// ---------------------------------------------
+const INVITATION_OBITUARY_KEYWORDS = [
+  "모바일 청첩장", "모바일청첩장", "청첩장 확인", "부고 안내",
+  "모바일 부고장", "삼가 고인의 명복을", "결혼식 초대장 확인",
+];
+
+// ---------------------------------------------
+// 13. 채용/부업 사기 패턴
+// -> "고수익 알바", "재택 부업" 등으로 유인해 개인정보나 보증금을
+//    요구하는 취업 사기형 스미싱/이메일입니다.
+// ---------------------------------------------
+const JOB_SCAM_KEYWORDS = [
+  "고수익 알바", "재택 부업", "단순 업무 고수익", "일당 지급",
+  "출근 없이 근무", "부업 문의", "카톡으로 면접",
+];
+
+// ---------------------------------------------
+// 14. 결제/로그인 알림 사칭 패턴
+// -> 실제 결제·로그인 알림처럼 꾸며 "본인이 아니라면" 클릭을
+//    유도하는 확인 유도형 문구입니다.
+// ---------------------------------------------
+const PAYMENT_LOGIN_ALERT_KEYWORDS = [
+  "해외 결제 승인", "카드 결제 승인", "새로운 기기에서 로그인",
+  "본인이 아니라면", "결제가 완료되었습니다", "정기결제 자동 갱신",
+];
+
+// ---------------------------------------------
 // 유틸 함수: 텍스트에서 URL 추출
 // -> 문자 메시지는 종종 http:// 없이 "bit.ly/abc123" 형태로 오기 때문에,
 //    프로토콜이 없는 형태도 함께 잡아냅니다.
@@ -253,6 +325,90 @@ export function analyzeWithRules(text: string, type: InputType): RuleResult {
       detail: `"${matchedRemote.slice(0, 3).join(", ")}" 등 원격제어 앱 설치나 화면 공유를 유도하는 표현입니다. 이런 앱은 기기를 통째로 장악당할 수 있어 매우 위험합니다.`,
       score: 60,
       critical: true,
+    });
+  }
+
+  // --- 대출/투자 사기 유혹 검사 ---
+  const matchedLoanInvestment = LOAN_INVESTMENT_KEYWORDS.filter((kw) =>
+    text.includes(kw)
+  );
+  if (matchedLoanInvestment.length > 0) {
+    flags.push({
+      label: "대출/투자 사기 의심",
+      detail: `"${matchedLoanInvestment.slice(0, 3).join(", ")}" 등 저금리 대출이나 고수익 투자를 미끼로 접근하는 전형적인 금융 사기 표현입니다.`,
+      score: 25,
+    });
+  }
+
+  // --- 지인/가족 사칭(메신저 피싱) 검사 ---
+  // "폰이 고장 났다"며 접근해 상품권/급전을 요구하는 수법은 그 자체로
+  // 결정적인 위험 신호이므로 critical로 취급합니다.
+  const matchedImpersonation = IMPERSONATION_MESSENGER_KEYWORDS.filter((kw) =>
+    text.includes(kw)
+  );
+  if (matchedImpersonation.length > 0) {
+    flags.push({
+      label: "지인/가족 사칭 의심",
+      detail: `"${matchedImpersonation.slice(0, 3).join(", ")}" 등 지인이나 가족을 사칭해 상품권·급전을 요구하는 메신저 피싱에서 흔히 쓰이는 표현입니다.`,
+      score: 55,
+      critical: true,
+    });
+  }
+
+  // --- 링크 클릭 유도 일반 표현 검사 ---
+  const matchedClickLure = CLICK_LURE_KEYWORDS.filter((kw) => text.includes(kw));
+  if (matchedClickLure.length > 0) {
+    flags.push({
+      label: "클릭 유도 표현",
+      detail: `"${matchedClickLure.slice(0, 3).join(", ")}" 등 즉각적인 링크 클릭을 재촉하는 표현이 발견되었습니다.`,
+      score: 10,
+    });
+  }
+
+  // --- 관세/통관 사기 검사 ---
+  const matchedCustoms = CUSTOMS_SCAM_KEYWORDS.filter((kw) => text.includes(kw));
+  if (matchedCustoms.length > 0) {
+    flags.push({
+      label: "관세/통관 사기 의심",
+      detail: `"${matchedCustoms.slice(0, 3).join(", ")}" 등 해외직구 통관·관세 미납을 빙자해 결제나 클릭을 유도하는 표현입니다.`,
+      score: 20,
+    });
+  }
+
+  // --- 청첩장/부고 위장 스미싱 검사 ---
+  // 실제 경조사 안내로 착각하기 쉬워 클릭률이 높은 최신 스미싱 수법이므로
+  // critical로 취급합니다.
+  const matchedInvitation = INVITATION_OBITUARY_KEYWORDS.filter((kw) =>
+    text.includes(kw)
+  );
+  if (matchedInvitation.length > 0) {
+    flags.push({
+      label: "청첩장/부고 위장 스미싱 의심",
+      detail: `"${matchedInvitation.slice(0, 3).join(", ")}" 등 경조사 안내를 가장해 악성 링크·앱 설치를 유도하는 최신 스미싱 수법입니다.`,
+      score: 55,
+      critical: true,
+    });
+  }
+
+  // --- 채용/부업 사기 검사 ---
+  const matchedJobScam = JOB_SCAM_KEYWORDS.filter((kw) => text.includes(kw));
+  if (matchedJobScam.length > 0) {
+    flags.push({
+      label: "채용/부업 사기 의심",
+      detail: `"${matchedJobScam.slice(0, 3).join(", ")}" 등 고수익 부업을 미끼로 접근하는 취업 사기형 표현입니다.`,
+      score: 20,
+    });
+  }
+
+  // --- 결제/로그인 알림 사칭 검사 ---
+  const matchedPaymentAlert = PAYMENT_LOGIN_ALERT_KEYWORDS.filter((kw) =>
+    text.includes(kw)
+  );
+  if (matchedPaymentAlert.length > 0) {
+    flags.push({
+      label: "결제/로그인 알림 사칭 의심",
+      detail: `"${matchedPaymentAlert.slice(0, 3).join(", ")}" 등 실제 결제·로그인 알림처럼 꾸며 확인을 유도하는 표현입니다.`,
+      score: 20,
     });
   }
 
