@@ -10,7 +10,7 @@ interface AnalysisResult {
   score: number;
   flags: { label: string; detail: string; score: number }[];
   riskLevel: "low" | "caution" | "high";
-  aiComment: string | null; // AI(2단계) 코멘트, 규칙 점수가 애매할 때만 채워짐
+  aiComment: string | null; // AI(2단계) 코멘트, 항상 요청하며 규칙 기반 분석을 보완함
 }
 
 // AI가 보내주는 코멘트에는 종종 **강조** 형태의 마크다운 굵게 표시가
@@ -172,7 +172,7 @@ export default function Home() {
           {result.aiComment && (
             <div className="rounded-lg border border-signal-caution/30 bg-signal-caution/5 p-4">
               <p className="mb-1 text-xs font-semibold text-signal-caution">
-                AI 종합 분석
+                AI 추가 분석
               </p>
               <p className="text-sm text-slate-300">
                 {renderBoldMarkdown(result.aiComment)}
