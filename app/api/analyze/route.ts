@@ -26,12 +26,18 @@ export async function POST(req: NextRequest) {
 
     let aiComment: string | null = null;
 
-    // ---------- 2단계: 점수가 애매한 구간(40~69점)일 때만 AI 호출 ----------
-    // 이렇게 하면 API 호출 횟수를 최소화하면서도, 판단이 어려운 경우엔
-    // AI의 설명을 추가로 받아 완성도를 높일 수 있습니다.
-    if (ruleResult.riskLevel === "caution" && apiKey) {
+    // ---------- 2단계: 위험 요소(플래그)가 하나라도 감지되면 AI 호출 ----------
+    // 위험도 등급(low/caution/high)에 상관없이, 규칙 기반 분석에서
+    // 플래그가 하나라도 잡히면 AI에게 추가 설명을 요청합니다.
+    if (ruleResult.flags.length > 0 && apiKey) {
       try {
-        aiComment = await getAiComment(text, type, ruleResult.score);
+        aiComment = await getAiComment(
+          text,
+          type,
+          ruleResult.score,
+          ruleResult.riskLevel,
+          ruleResult.flags.map((f) => f.label)
+        );
       } catch (aiError) {
         // AI 호출이 실패해도 전체 서비스는 계속 동작해야 합니다.
         // (규칙 기반 결과만으로도 사용자에게 의미 있는 응답이 가능하기 때문)
@@ -55,10 +61,18 @@ export async function POST(req: NextRequest) {
   }
 }
 
+const RISK_LEVEL_LABEL: Record<string, string> = {
+  low: "낮음",
+  caution: "주의",
+  high: "높음",
+};
+
 async function getAiComment(
   text: string,
   type: InputType,
-  ruleScore: number
+  ruleScore: number,
+  riskLevel: string,
+  flagLabels: string[]
 ): Promise<string> {
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
@@ -67,8 +81,17 @@ async function getAiComment(
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
+  const levelLabel = RISK_LEVEL_LABEL[riskLevel] ?? riskLevel;
+  const flagsText =
+    flagLabels.length > 0
+      ? flagLabels.map((label) => `- ${label}`).join("\n")
+      : "(감지된 세부 항목 없음)";
+
   const prompt = `당신은 피싱/스미싱 탐지를 돕는 보안 분석가입니다.
-다음은 ${type === "sms" ? "문자 메시지" : "이메일"} 내용이며, 규칙 기반 분석에서 위험도 ${ruleScore}점(100점 만점)으로 "주의" 등급을 받았습니다.
+다음은 ${type === "sms" ? "문자 메시지" : "이메일"} 내용이며, 규칙 기반 분석에서 위험도 ${ruleScore}점(100점 만점)으로 "${levelLabel}" 등급을 받았습니다.
+
+감지된 위험 요소:
+${flagsText}
 
 --- 내용 ---
 ${text}
