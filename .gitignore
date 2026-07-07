@@ -1,0 +1,25 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# 환경변수 (API 키가 들어있는 파일 - 절대 올리면 안 됨)
+.env
+.env.local
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

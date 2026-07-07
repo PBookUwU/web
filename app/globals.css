@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Pretendard", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Pretendard", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+/* 위험도 게이지 링 애니메이션 */
+@keyframes gauge-fill {
+  from {
+    stroke-dashoffset: 283;
+  }
+}
+
+.gauge-ring {
+  animation: gauge-fill 1s ease-out forwards;
+}
+
+/* 접근성: 모션을 줄이고 싶은 사용자를 위한 대응 */
+@media (prefers-reduced-motion: reduce) {
+  .gauge-ring {
+    animation: none;
+  }
+}
