@@ -367,7 +367,7 @@ export function mergeAiDetectedCategories(
 
   let riskLevel: RuleResult["riskLevel"] = "low";
   if (totalScore >= 70 || hasCriticalFlag) riskLevel = "high";
-  else if (totalScore >= 40) riskLevel = "caution";
+  else if (totalScore >= 25) riskLevel = "caution";
 
   return { score: totalScore, flags: allFlags, riskLevel };
 }
@@ -574,7 +574,7 @@ export function analyzeWithRules(text: string, type: InputType): RuleResult {
 
   let riskLevel: RuleResult["riskLevel"] = "low";
   if (totalScore >= 70 || hasCriticalFlag) riskLevel = "high";
-  else if (totalScore >= 40) riskLevel = "caution";
+  else if (totalScore >= 25) riskLevel = "caution";
 
   return { score: totalScore, flags, riskLevel };
 }
