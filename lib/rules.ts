@@ -367,7 +367,7 @@ export function mergeAiDetectedCategories(
 
   let riskLevel: RuleResult["riskLevel"] = "low";
   if (totalScore >= 70 || hasCriticalFlag) riskLevel = "high";
-  else if (totalScore >= 25) riskLevel = "caution";
+  else if (totalScore >= 25 || allFlags.length > 0) riskLevel = "caution";
 
   return { score: totalScore, flags: allFlags, riskLevel };
 }
@@ -574,7 +574,9 @@ export function analyzeWithRules(text: string, type: InputType): RuleResult {
 
   let riskLevel: RuleResult["riskLevel"] = "low";
   if (totalScore >= 70 || hasCriticalFlag) riskLevel = "high";
-  else if (totalScore >= 25) riskLevel = "caution";
+  // 점수가 25점 미만이더라도 탐지된 위험 요소가 하나라도 있으면
+  // "안전"으로 표시하지 않고 최소 "주의" 등급으로 올립니다.
+  else if (totalScore >= 25 || flags.length > 0) riskLevel = "caution";
 
   return { score: totalScore, flags, riskLevel };
 }
